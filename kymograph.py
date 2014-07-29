@@ -179,7 +179,7 @@ class Kymograph3D(object):
             kymograph_img_1 = self._create_kymogrpah_image(0, i, channel_scaling)
             kymograph_img_2 = numpy.fliplr(self._create_kymogrpah_image(1, i, channel_scaling))
             butterfly_img = numpy.hstack((kymograph_img_2, kymograph_img_1))
-            vigra.impex.writeImage(butterfly_img.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_%05d.tif" % (prefix, i)), dtype=numpy.uint8)
+            vigra.impex.writeImage(butterfly_img.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_O%05d.tif" % (prefix, i)), dtype=numpy.uint8)
 
 
     def _extract_line(self, images, origin, destination, radius, aggregation, extension):

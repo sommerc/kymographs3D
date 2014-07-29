@@ -4,7 +4,6 @@ def example_zylinder():
     """ Debug example: Show sampled zylinder"""
     test_rodriguez_rot(length=100,radius=1)
      
-
 def example_data_preparaton():
     """ Preprocess input multi-page OME tif: """
     tif_file = 'M:/experiments/Experiments_002500/002513/Analysis/2014_03_27(microtubules)/Process_02_3D_tracking_CENPA/cell1_12_crop_3D_Gaussian_ROI_t11_150.tif'
@@ -45,10 +44,7 @@ def example_3():
                         "tracks_kinetochore.txt", # Note change of order
                         [1, 1, 2.35],)
     kymo3.compute(radius=1, aggregation='max', extension=[0.1,0.1], ids=((0,84), (1,84)))
-    kymo3.export_raw()
-
-    
-    
+    kymo3.export_raw() 
     
 if __name__ == "__main__":
     # Examples
