@@ -142,8 +142,9 @@ class Kymograph3D(object):
     def export(self, output_dir=".", prefix="kymo", channel_scaling=(1.2, 0.2)):
         log.info('Exporting kymograph images to folder %s'% output_dir)
         for k_id, p_id in self.kymograph_data:
+            start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
             kymograph_img = self._create_kymogrpah_image(k_id, p_id, channel_scaling)
-            vigra.impex.writeImage(kymograph_img.clip(0,255).astype(numpy.uint8), os.path.join(output_dir, "%s_%02d_%05d.tif" % (prefix, p_id, k_id)), dtype=numpy.uint8)
+            vigra.impex.writeImage(kymograph_img.clip(0,255).astype(numpy.uint8), os.path.join(output_dir, "%s_O%02d_D%05d_T%03d.tif" % (prefix, p_id, k_id, start_time)), dtype=numpy.uint8)
             
     def _create_kymogrpah_image(self, k_id, p_id, channel_scaling): 
         max_len = numpy.max(map(lambda x: len(x[0]), self.kymograph_data[(k_id, p_id)].values()))
@@ -159,6 +160,14 @@ class Kymograph3D(object):
             kymograph_img[:,:,c] *= channel_scaling[c]   
         return kymograph_img
     
+    def export_raw(self, output_dir=".", prefix="kymo_raw"):
+        log.info('Exporting raw kymograph images per channel to folder %s'% output_dir)
+        for k_id, p_id in self.kymograph_data:
+            start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
+            kymograph_img = self._create_kymogrpah_image(k_id, p_id, channel_scaling=(1,1))
+            for c in range(2):
+                vigra.impex.writeImage(kymograph_img.astype(numpy.float32)[:,:, c], os.path.join(output_dir, "%s_C%02d_O%02d_D%05d_T%03d.tif" % (prefix, c, p_id, k_id, start_time)), dtype=numpy.float32)
+    
     def export_butterfly(self, output_dir=".", prefix="kymo_butterfly", channel_scaling=(1.2, 0.2)):
         log.info('Exporting kymograph butterfly images to folder %s'% output_dir)
         
@@ -171,8 +180,7 @@ class Kymograph3D(object):
             kymograph_img_2 = numpy.fliplr(self._create_kymogrpah_image(1, i, channel_scaling))
             butterfly_img = numpy.hstack((kymograph_img_2, kymograph_img_1))
             vigra.impex.writeImage(butterfly_img.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_%05d.tif" % (prefix, i)), dtype=numpy.uint8)
-#             vigra.impex.writeImage(kymograph_img_1.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_%05d_01.tif" % (prefix, i)), dtype=numpy.uint8)
-#             vigra.impex.writeImage(kymograph_img_2.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_%05d_02.tif" % (prefix, i)), dtype=numpy.uint8)
+
 
     def _extract_line(self, images, origin, destination, radius, aggregation, extension):
         origin_ext = origin + (origin - destination) * extension[0]
@@ -232,7 +240,6 @@ def test_rodriguez_rot(length=20, radius=3):
         for k, (xi, yi, zi) in enumerate(zip(x, y, z)):
             ax.plot([xi], [yi], [zi], 'ro')
             for j, a in enumerate(ov):
-                print a.dot([xi,yi,zi])
                 ax.plot([a[0] + xi], [a[1]+ yi], [a[2]+zi], 'o', color=(0,0.2,k/float(length)))
         ax.axis("equal")
         plt.show()
