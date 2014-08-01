@@ -2,7 +2,11 @@ from kymograph import Kymograph3D, test_rodriguez_rot, convert_and_resample_from
 
 def example_zylinder():
     """ Debug example: Show sampled zylinder"""
-    test_rodriguez_rot(length=100,radius=1)
+    test_rodriguez_rot(length=100,radius=2)
+    
+def example_zylinder_width_phase_shifts():
+    """ Debug example: Show sampled zylinder"""
+    test_rodriguez_rot(length=100,radius=3, phase_shift=True)
      
 def example_data_preparaton():
     """ Preprocess input multi-page OME tif: """
@@ -46,9 +50,21 @@ def example_3():
     kymo3.compute(radius=1, aggregation='max', extension=[0.1,0.1], ids=((0,84), (1,84)))
     kymo3.export_raw() 
     
+def example_4(): 
+    """ Example 3: raw kymographs for all tracks without pole extension only on rim"""
+    kymo3 = Kymograph3D("cell1_12_crop.h5",
+                        "data_resampled_prefiltered",
+                        "tracks_pole.txt",
+                        "tracks_kinetochore.txt", # Note change of order
+                        [1, 1, 2.35],)
+    kymo3.compute(radius=3, aggregation='max', extension=[0,0], integration='rim')
+    kymo3.export_raw() 
+    
 if __name__ == "__main__":
     # Examples
-    example_zylinder()
+#     example_zylinder()
+#     example_zylinder_width_phase_shifts()
+    example_4()
     example_1()
     example_2()
     example_3()
