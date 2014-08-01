@@ -20,20 +20,21 @@ def get_w(x,y,z):
                         [ z,  0, -x],
                         [-y,  x,  0]])
     
-def get_rodriguies_rotations(x,y,z, num=8):
+def get_rodriguies_rotations(x,y,z, num=8, phase_shift=False):
     W = get_w(x,y,z)
     W2 = W.dot(W)
-    return [numpy.eye(3,3) + numpy.sin(phi) * W + (1-numpy.cos(phi)) * W2 for phi in numpy.linspace(0, 2*numpy.pi * (num-1) / num, num)] 
+    num = float(num)
+    if phase_shift:
+        return [numpy.eye(3,3) + numpy.sin(phi) * W + (1-numpy.cos(phi)) * W2 for phi in numpy.linspace(numpy.pi / num, 2*numpy.pi * (num-1) / num + numpy.pi / num, num)]
+    else:
+        return [numpy.eye(3,3) + numpy.sin(phi) * W + (1-numpy.cos(phi)) * W2 for phi in numpy.linspace(0, 2*numpy.pi * (num-1) / num, num)] 
 
-def get_circular_offset_vectors(vec, radius):
+def get_circular_offset_vectors(vec, radius, phase_shift=False):
     if radius == 0:
         return []
     perp_vec = numpy.array([-vec[1], vec[0], 0])
-    circ_offset_vecs =  numpy.vstack([R.dot(normalize(perp_vec)) for R in get_rodriguies_rotations(*normalize(vec))])
-    all_circ_offset_vecs = []
-    for r in range(1, radius+1):
-        all_circ_offset_vecs.append(circ_offset_vecs * r)
-    return numpy.vstack(all_circ_offset_vecs)
+    circ_offset_vecs =  numpy.vstack([R.dot(normalize(perp_vec)) for R in get_rodriguies_rotations(*normalize(vec), phase_shift=phase_shift)] )
+    return circ_offset_vecs * radius
 
 def normalize(vec):
     return vec / numpy.linalg.norm(vec)
@@ -109,7 +110,7 @@ class Kymograph3D(object):
         self.track_mate_origin = TrackMateReader("Origin", track_mate_file_origin, xyz_scale)
         self.track_mate_dest = TrackMateReader("Destination", track_mate_file_dest, xyz_scale)
         
-    def compute(self, radius=1, aggregation='mean', extension=(0, 0.1), on_channels=(0,1), ids=None):
+    def compute(self, radius=1, aggregation='mean', extension=(0, 0.1), on_channels=(0,1), ids=None, integration='full'):
         log.info("Compute kymorgraphs for radis='%d', aggregation='%s' and extension='%r'" % (radius, aggregation, extension))
         if not (0 <= radius < 12) or not isinstance(radius, (int,)):
             raise RuntimeError("line width needs to be an integer with 0 < radius < 12")
@@ -137,7 +138,8 @@ class Kymograph3D(object):
                                                                    destination, 
                                                                    radius,
                                                                    aggregation,
-                                                                   extension)
+                                                                   extension,
+                                                                   integration)
         
     def export(self, output_dir=".", prefix="kymo", channel_scaling=(1.2, 0.2)):
         log.info('Exporting kymograph images to folder %s'% output_dir)
@@ -182,7 +184,7 @@ class Kymograph3D(object):
             vigra.impex.writeImage(butterfly_img.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_O%05d.tif" % (prefix, i)), dtype=numpy.uint8)
 
 
-    def _extract_line(self, images, origin, destination, radius, aggregation, extension):
+    def _extract_line(self, images, origin, destination, radius, aggregation, extension, integration='full'):
         origin_ext = origin + (origin - destination) * extension[0]
         if extension[1] > 1:
             num = extension[1] 
@@ -196,13 +198,25 @@ class Kymograph3D(object):
         x =  numpy.linspace(origin_ext[0], dest_ext[0], num)
         y =  numpy.linspace(origin_ext[1], dest_ext[1], num)
         z =  numpy.linspace(origin_ext[2], dest_ext[2], num)
-    
-        perp_offset_vecs = get_circular_offset_vectors(destination-origin, radius)
         
-        coords = numpy.zeros((3, len(x), len(perp_offset_vecs)+1))
-        coords[2, :, -1] = x
-        coords[1, :, -1] = y
-        coords[0, :, -1] = z
+        if integration=="full":
+            
+            all_circ_offsets = []
+            for r in range(1, radius+1):
+                perp_offset_vecs = get_circular_offset_vectors(destination-origin, r, phase_shift=not bool(r % 2))
+                all_circ_offsets.append(perp_offset_vecs)
+            perp_offset_vecs = numpy.vstack(all_circ_offsets)    
+            coords = numpy.zeros((3, len(x), len(perp_offset_vecs)+1))
+            coords[2, :, -1] = x
+            coords[1, :, -1] = y
+            coords[0, :, -1] = z
+        elif integration=='rim':
+            perp_offset_vecs = get_circular_offset_vectors(destination-origin, radius, phase_shift=False)
+            coords = numpy.zeros((3, len(x), len(perp_offset_vecs)))
+        else:
+            RuntimeError("Integration %s not understood. not in ('full', 'rim')" % integration)
+            
+        
         
         for j, (x_,y_,z_) in enumerate(perp_offset_vecs):
             coords[2, :, j] = x_ + x
@@ -227,7 +241,7 @@ class Kymograph3DTestBase(unittest.TestCase):
 class Kymograph3DTestBasic(Kymograph3DTestBase):  
     pass
 
-def test_rodriguez_rot(length=20, radius=3):
+def test_rodriguez_rot(length=20, radius=3, phase_shift=False):
         import matplotlib.pyplot as plt
         from mpl_toolkits.mplot3d import Axes3D
         fig = plt.figure()
@@ -236,11 +250,15 @@ def test_rodriguez_rot(length=20, radius=3):
         vec = numpy.array([4,8,6])
         
         x, y, z = numpy.linspace(0, vec[0], length), numpy.linspace(0, vec[1], length), numpy.linspace(0, vec[2], length)
-        ov = get_circular_offset_vectors(vec, radius)
-        for k, (xi, yi, zi) in enumerate(zip(x, y, z)):
-            ax.plot([xi], [yi], [zi], 'ro')
-            for j, a in enumerate(ov):
-                ax.plot([a[0] + xi], [a[1]+ yi], [a[2]+zi], 'o', color=(0,0.2,k/float(length)))
+        for r in range(1, radius+1):
+            if phase_shift:
+                ov = get_circular_offset_vectors(vec, r, not bool(r % 2))
+            else:
+                ov = get_circular_offset_vectors(vec, r, False)
+            for k, (xi, yi, zi) in enumerate(zip(x, y, z)):
+                ax.plot([xi], [yi], [zi], 'ro')
+                for j, a in enumerate(ov):
+                    ax.plot([a[0] + xi], [a[1]+ yi], [a[2]+zi], 'o', color=(0,0.2,k/float(length)))
         ax.axis("equal")
         plt.show()
     
