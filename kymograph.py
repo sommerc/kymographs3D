@@ -134,7 +134,10 @@ class Kymograph3D(object):
         self.track_mate_origin = TrackMateReader("Origin", track_mate_file_origin, xyz_scale)
         self.track_mate_dest = TrackMateReader("Destination", track_mate_file_dest, xyz_scale)
         
-    def compute(self, radius=1, aggregation='mean', extension=(0, 0.1), on_channels=(0,1), ids=None, integration='full', export_raw_planes=False):
+    def compute(self, radius=1, aggregation='mean', extension=(0, 0.1), on_channels=(0,1), ids=None, integration='full', 
+                export_planes=False,
+                plane_width=5,
+                plane_pixel_width=31):
         log.info("Compute kymorgraphs for radis='%d', aggregation='%s' and extension='%r'" % (radius, aggregation, extension))
         if not (0 <= radius < 12) or not isinstance(radius, (int,)):
             raise RuntimeError("line width needs to be an integer with 0 < radius < 12")
@@ -165,18 +168,20 @@ class Kymograph3D(object):
                                                                    aggregation,
                                                                    extension,
                                                                    integration)
-                if export_raw_planes:
+                if export_planes:
                     self.kymograph_plane_data[(k_id, p_id)][frame] = self._extract_plane([self.image_raw[frame, c, :, :, :] for c in on_channels], 
                                                                            origin, 
                                                                            destination, 
-                                                                           extension) 
+                                                                           extension,
+                                                                           width=plane_width,
+                                                                           pixel_width=plane_pixel_width) 
                                                                          
                     
                 
     def export_planes(self, channel_scaling, output_dir=".",  prefix="_planes",):
         if len(self.kymograph_plane_data) == 0:
             RuntimeError("Plane images not generated. Use the flag in compute, in order to generate them")
-        log.info('Exporting plane images to folder %s'% output_dir)
+        log.info('Exporting plane images to folder "%s"'% os.path.abspath(output_dir))
         for k_id, p_id in self.kymograph_plane_data:
             for frame in self.kymograph_plane_data[(k_id, p_id)]:
                 planes = self.kymograph_plane_data[(k_id, p_id)][frame]
@@ -192,7 +197,7 @@ class Kymograph3D(object):
                 vigra.impex.writeVolume(vigra.VigraArray(img.clip(0,255).astype(numpy.uint8), axistags=vigra.VigraArray.defaultAxistags(4)), os.path.join(output_dir, "%s_O%02d_D%05d_T%03d.tif" % (prefix, p_id, k_id, frame)), '', dtype=numpy.uint8)            
         
     def export(self, output_dir=".", prefix="kymo", channel_scaling=(1.2, 0.2)):
-        log.info('Exporting kymograph images to folder %s'% output_dir)
+        log.info('Exporting kymograph images to folder "%s"'% os.path.abspath(output_dir))
         for k_id, p_id in self.kymograph_data:
             start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
             kymograph_img = self._create_kymogrpah_image(k_id, p_id, channel_scaling)
@@ -213,7 +218,7 @@ class Kymograph3D(object):
         return kymograph_img
     
     def export_raw(self, output_dir=".", prefix="kymo_raw"):
-        log.info('Exporting raw kymograph images per channel to folder %s'% output_dir)
+        log.info('Exporting raw kymograph images per channel to folder "%s"'% os.path.abspath(output_dir))
         for k_id, p_id in self.kymograph_data:
             start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
             kymograph_img = self._create_kymogrpah_image(k_id, p_id, channel_scaling=(1,1))
@@ -221,7 +226,7 @@ class Kymograph3D(object):
                 vigra.impex.writeImage(kymograph_img.astype(numpy.float32)[:,:, c], os.path.join(output_dir, "%s_C%02d_O%02d_D%05d_T%03d.tif" % (prefix, c, p_id, k_id, start_time)), dtype=numpy.float32)
     
     def export_butterfly(self, output_dir=".", prefix="kymo_butterfly", channel_scaling=(1.2, 0.2)):
-        log.info('Exporting kymograph butterfly images to folder %s'% output_dir)
+        log.info('Exporting kymograph butterfly images to folder "%s"'% os.path.abspath(output_dir))
         
         ids = set()
         for _, p_id in self.kymograph_data:
@@ -233,7 +238,8 @@ class Kymograph3D(object):
             butterfly_img = numpy.hstack((kymograph_img_2, kymograph_img_1))
             vigra.impex.writeImage(butterfly_img.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_O%05d.tif" % (prefix, i)), dtype=numpy.uint8)
 
-    def _extract_plane(self, images, origin, destination, extension, width=31, scale_factor=0.5):
+    def _extract_plane(self, images, origin, destination, extension, width=5, pixel_width=31):
+        scale_factor = float(width) / pixel_width
         origin_ext = origin + (origin - destination) * extension[0]
         if extension[1] > 1:
             num = extension[1] 
@@ -250,7 +256,7 @@ class Kymograph3D(object):
         
         vec = destination-origin
         vec /= numpy.linalg.norm(vec)
-        plane_cords = get_square_offset_vectors(vec, width)          
+        plane_cords = get_square_offset_vectors(vec, pixel_width)          
         plane_cords.shape += (1,) 
         plane_cords = numpy.repeat(plane_cords, len(x), 3)
        
