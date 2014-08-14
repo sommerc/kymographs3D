@@ -185,8 +185,8 @@ class Kymograph3D(object):
         for k_id, p_id in self.kymograph_plane_data:
             for frame in self.kymograph_plane_data[(k_id, p_id)]:
                 planes = self.kymograph_plane_data[(k_id, p_id)][frame]
-                planes_c0 = planes[0]
-                planes_c1 = planes[1]
+                planes_c0 = planes[1]
+                planes_c1 = planes[0]
                 img = numpy.zeros((planes_c0.shape[0], planes_c0.shape[1], planes_c0.shape[2], 3), dtype=numpy.float32)
                 for p in xrange(planes_c0.shape[2]):    
                     img[:,:,p, 0] = planes_c0[:,:,p]
