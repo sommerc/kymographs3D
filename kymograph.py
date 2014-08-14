@@ -31,11 +31,11 @@ def get_rodriguies_rotations(x,y,z, num=8, phase_shift=False):
     else:
         return [numpy.eye(3,3) + numpy.sin(phi) * W + (1-numpy.cos(phi)) * W2 for phi in numpy.linspace(0, 2*numpy.pi * (num-1) / num, num)] 
 
-def get_circular_offset_vectors(vec, radius, phase_shift=False):
+def get_circular_offset_vectors(vec, radius, num=8, phase_shift=False):
     if radius == 0:
         return []
     perp_vec = numpy.array([-vec[1], vec[0], 0])
-    circ_offset_vecs =  numpy.vstack([R.dot(normalize(perp_vec)) for R in get_rodriguies_rotations(*normalize(vec), phase_shift=phase_shift)] )
+    circ_offset_vecs =  numpy.vstack([R.dot(normalize(perp_vec)) for R in get_rodriguies_rotations(*normalize(vec), num=num, phase_shift=phase_shift)] )
     return circ_offset_vecs * radius
 
 def normalize(vec):
@@ -289,7 +289,7 @@ class Kymograph3D(object):
             
             all_circ_offsets = []
             for r in range(1, radius+1):
-                perp_offset_vecs = get_circular_offset_vectors(destination-origin, r, phase_shift=not bool(r % 2))
+                perp_offset_vecs = get_circular_offset_vectors(destination-origin, r, num=r*8, phase_shift=not bool(r % 2))
                 all_circ_offsets.append(perp_offset_vecs)
             if len(all_circ_offsets) > 0:
                 perp_offset_vecs = numpy.vstack(all_circ_offsets) 
