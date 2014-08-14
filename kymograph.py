@@ -122,7 +122,7 @@ class Kymograph3D(object):
         self.kymograph_data = defaultdict(dict)
         
         for frame, k_id, p_id, k_vec, p_vec in self.track_mate_dest.join_on_frame(self.track_mate_origin):
-            if (ids is not None and (k_id, p_id) in ids) or ids is None:
+            if (ids is not None and (p_id, k_id) in ids) or ids is None:
                 log.info("\tExtracting vectors for ids: %d %d and frame %d" % (k_id, p_id, frame))
                 self.kymograph_vectors[(k_id, p_id)][frame] = k_vec, p_vec
             
@@ -141,7 +141,7 @@ class Kymograph3D(object):
                                                                    extension,
                                                                    integration)
         
-    def export(self, output_dir=".", prefix="kymo", channel_scaling=(1.2, 0.2)):
+    def export(self, output_dir='.', prefix="kymo", channel_scaling=(1, 1)):
         log.info('Exporting kymograph images to folder %s'% output_dir)
         for k_id, p_id in self.kymograph_data:
             start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
@@ -153,8 +153,8 @@ class Kymograph3D(object):
         max_time = numpy.max(self.kymograph_data[(k_id, p_id)].keys())
         kymograph_img = numpy.zeros((max_time+1, max_len, 3), dtype=numpy.float32)
         for frame in self.kymograph_data[(k_id, p_id)]:
-            kymograph_img[frame, :len(self.kymograph_data[(k_id, p_id)][frame][0]), 0] = self.kymograph_data[(k_id, p_id)][frame][0]
-            kymograph_img[frame, :len(self.kymograph_data[(k_id, p_id)][frame][1]), 1] = self.kymograph_data[(k_id, p_id)][frame][1]
+            kymograph_img[frame, :len(self.kymograph_data[(k_id, p_id)][frame][0]), 0] = self.kymograph_data[(k_id, p_id)][frame][1]
+            kymograph_img[frame, :len(self.kymograph_data[(k_id, p_id)][frame][1]), 1] = self.kymograph_data[(k_id, p_id)][frame][0]
                      
         for c in range(2):
             # some pixels get negativ
@@ -185,6 +185,7 @@ class Kymograph3D(object):
 
 
     def _extract_line(self, images, origin, destination, radius, aggregation, extension, integration='full'):
+        #origin_ext = destination - 5*(origin - destination)/(origin - destination)
         origin_ext = origin + (origin - destination) * extension[0]
         if extension[1] > 1:
             num = extension[1] 
