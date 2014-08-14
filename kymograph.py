@@ -14,8 +14,10 @@ logging.basicConfig()
 log = logging.getLogger("Kymograph3D")
 log.setLevel(logging.DEBUG)
 
+eps = 10e-9
+
 def get_w(x,y,z):
-    assert (numpy.linalg.norm([x,y,z]) - 1) < 10e-9
+    assert (numpy.linalg.norm([x,y,z]) - 1) < eps
     return numpy.array([[ 0, -z,  y],
                         [ z,  0, -x],
                         [-y,  x,  0]])
@@ -38,6 +40,28 @@ def get_circular_offset_vectors(vec, radius, phase_shift=False):
 
 def normalize(vec):
     return vec / numpy.linalg.norm(vec)
+
+def get_square_offset_vectors(vec, width):
+    vec /= numpy.linalg.norm(vec)
+    assert width % 2 == 1
+    
+    perp_vec_1 = numpy.array([-vec[1] -vec[2], vec[0], vec[0]])
+    if (numpy.linalg.norm(perp_vec_1)) < eps:
+        perp_vec_1 = numpy.array([vec[2], vec[2], -vec[0] -vec[1]])
+        
+    perp_vec_2 = numpy.cross(vec, perp_vec_1)
+    
+    perp_vec_1 /= numpy.linalg.norm(perp_vec_1)
+    perp_vec_2 /= numpy.linalg.norm(perp_vec_2)
+    
+    result = numpy.zeros((3, width, width), dtype=numpy.float32)
+    for i in xrange(width):
+        for j in xrange(width):
+            result[:, i, j] = perp_vec_1*(i-width/2) + perp_vec_2*(j-width/2)   
+    return result
+    
+    
+    
 
 class TrackMateReader(object):
     def __init__(self, name, filename, xyz_scale=None):
@@ -110,7 +134,10 @@ class Kymograph3D(object):
         self.track_mate_origin = TrackMateReader("Origin", track_mate_file_origin, xyz_scale)
         self.track_mate_dest = TrackMateReader("Destination", track_mate_file_dest, xyz_scale)
         
-    def compute(self, radius=1, aggregation='mean', extension=(0, 0.1), on_channels=(0,1), ids=None, integration='full'):
+    def compute(self, radius=1, aggregation='mean', extension=(0, 0.1), on_channels=(0,1), ids=None, integration='full', 
+                export_planes=False,
+                plane_width=5,
+                plane_pixel_width=31):
         log.info("Compute kymorgraphs for radis='%d', aggregation='%s' and extension='%r'" % (radius, aggregation, extension))
         if not (0 <= radius < 12) or not isinstance(radius, (int,)):
             raise RuntimeError("line width needs to be an integer with 0 < radius < 12")
@@ -120,6 +147,7 @@ class Kymograph3D(object):
         
         self.kymograph_vectors = defaultdict(dict)
         self.kymograph_data = defaultdict(dict)
+        self.kymograph_plane_data = defaultdict(dict)
         
         for frame, k_id, p_id, k_vec, p_vec in self.track_mate_dest.join_on_frame(self.track_mate_origin):
             if (ids is not None and (p_id, k_id) in ids) or ids is None:
@@ -140,9 +168,36 @@ class Kymograph3D(object):
                                                                    aggregation,
                                                                    extension,
                                                                    integration)
+                if export_planes:
+                    self.kymograph_plane_data[(k_id, p_id)][frame] = self._extract_plane([self.image_raw[frame, c, :, :, :] for c in on_channels], 
+                                                                           origin, 
+                                                                           destination, 
+                                                                           extension,
+                                                                           width=plane_width,
+                                                                           pixel_width=plane_pixel_width) 
+                                                                         
+                    
+                
+    def export_planes(self, channel_scaling, output_dir=".",  prefix="_planes",):
+        if len(self.kymograph_plane_data) == 0:
+            RuntimeError("Plane images not generated. Use the flag in compute, in order to generate them")
+        log.info('Exporting plane images to folder "%s"'% os.path.abspath(output_dir))
+        for k_id, p_id in self.kymograph_plane_data:
+            for frame in self.kymograph_plane_data[(k_id, p_id)]:
+                planes = self.kymograph_plane_data[(k_id, p_id)][frame]
+                planes_c0 = planes[0]
+                planes_c1 = planes[1]
+                img = numpy.zeros((planes_c0.shape[0], planes_c0.shape[1], planes_c0.shape[2], 3), dtype=numpy.float32)
+                for p in xrange(planes_c0.shape[2]):    
+                    img[:,:,p, 0] = planes_c0[:,:,p]
+                    img[:,:,p, 1] = planes_c1[:,:,p]
+                for c in xrange(2):
+                    img[:,:,:,c] = (img[:,:,:,c] - img[:,:,:,c].min())
+                    img[:,:,:,c] *= channel_scaling[c]  
+                vigra.impex.writeVolume(vigra.VigraArray(img.clip(0,255).astype(numpy.uint8), axistags=vigra.VigraArray.defaultAxistags(4)), os.path.join(output_dir, "%s_O%02d_D%05d_T%03d.tif" % (prefix, p_id, k_id, frame)), '', dtype=numpy.uint8)            
         
     def export(self, output_dir='.', prefix="kymo", channel_scaling=(1, 1)):
-        log.info('Exporting kymograph images to folder %s'% output_dir)
+        log.info('Exporting kymograph images to folder "%s"'% os.path.abspath(output_dir))
         for k_id, p_id in self.kymograph_data:
             start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
             kymograph_img = self._create_kymogrpah_image(k_id, p_id, channel_scaling)
@@ -163,7 +218,7 @@ class Kymograph3D(object):
         return kymograph_img
     
     def export_raw(self, output_dir=".", prefix="kymo_raw"):
-        log.info('Exporting raw kymograph images per channel to folder %s'% output_dir)
+        log.info('Exporting raw kymograph images per channel to folder "%s"'% os.path.abspath(output_dir))
         for k_id, p_id in self.kymograph_data:
             start_time = numpy.min(self.kymograph_data[(k_id, p_id)].keys())
             kymograph_img = self._create_kymogrpah_image(k_id, p_id, channel_scaling=(1,1))
@@ -171,7 +226,7 @@ class Kymograph3D(object):
                 vigra.impex.writeImage(kymograph_img.astype(numpy.float32)[:,:, c], os.path.join(output_dir, "%s_C%02d_O%02d_D%05d_T%03d.tif" % (prefix, c, p_id, k_id, start_time)), dtype=numpy.float32)
     
     def export_butterfly(self, output_dir=".", prefix="kymo_butterfly", channel_scaling=(1.2, 0.2)):
-        log.info('Exporting kymograph butterfly images to folder %s'% output_dir)
+        log.info('Exporting kymograph butterfly images to folder "%s"'% os.path.abspath(output_dir))
         
         ids = set()
         for _, p_id in self.kymograph_data:
@@ -183,6 +238,36 @@ class Kymograph3D(object):
             butterfly_img = numpy.hstack((kymograph_img_2, kymograph_img_1))
             vigra.impex.writeImage(butterfly_img.clip(0, 255).astype(numpy.uint8), os.path.join(output_dir, "%s_O%05d.tif" % (prefix, i)), dtype=numpy.uint8)
 
+    def _extract_plane(self, images, origin, destination, extension, width=5, pixel_width=31):
+        scale_factor = float(width) / pixel_width
+        origin_ext = origin + (origin - destination) * extension[0]
+        if extension[1] > 1:
+            num = extension[1] 
+            dest_ext = origin + normalize(destination - origin) * num 
+            assert (num - numpy.linalg.norm(origin-dest_ext)) < 10e-10
+        else:
+            dest_ext = destination + (destination - origin) * extension[1]
+            num = numpy.linalg.norm(dest_ext-origin_ext)
+        num = numpy.linalg.norm(dest_ext-origin_ext)
+    
+        x =  numpy.linspace(origin_ext[0], dest_ext[0], num)
+        y =  numpy.linspace(origin_ext[1], dest_ext[1], num)
+        z =  numpy.linspace(origin_ext[2], dest_ext[2], num)
+        
+        vec = destination-origin
+        vec /= numpy.linalg.norm(vec)
+        plane_cords = get_square_offset_vectors(vec, pixel_width)          
+        plane_cords.shape += (1,) 
+        plane_cords = numpy.repeat(plane_cords, len(x), 3)
+       
+        plane_cords*= scale_factor      
+        plane_cords[2, :, :, :] += x
+        plane_cords[1, :, :, :] += y
+        plane_cords[0, :, :, :] += z
+        
+        planes = [ndimage.map_coordinates(img, plane_cords, prefilter=False,  mode='nearest', cval=0) for img in images]
+        return planes
+        
 
     def _extract_line(self, images, origin, destination, radius, aggregation, extension, integration='full'):
         #origin_ext = destination - 5*(origin - destination)/(origin - destination)
@@ -206,12 +291,17 @@ class Kymograph3D(object):
             for r in range(1, radius+1):
                 perp_offset_vecs = get_circular_offset_vectors(destination-origin, r, phase_shift=not bool(r % 2))
                 all_circ_offsets.append(perp_offset_vecs)
-            perp_offset_vecs = numpy.vstack(all_circ_offsets)    
-            coords = numpy.zeros((3, len(x), len(perp_offset_vecs)+1))
+            if len(all_circ_offsets) > 0:
+                perp_offset_vecs = numpy.vstack(all_circ_offsets) 
+            else:
+                perp_offset_vecs = []   
+            coords = numpy.zeros((3, len(x), len(all_circ_offsets)+1))
             coords[2, :, -1] = x
             coords[1, :, -1] = y
             coords[0, :, -1] = z
         elif integration=='rim':
+            if radius == 0:
+                RuntimeError("For integration = 'rim', radius has to be > 0")
             perp_offset_vecs = get_circular_offset_vectors(destination-origin, radius, phase_shift=False)
             coords = numpy.zeros((3, len(x), len(perp_offset_vecs)))
         else:
@@ -261,6 +351,25 @@ def test_rodriguez_rot(length=20, radius=3, phase_shift=False):
                 for j, a in enumerate(ov):
                     ax.plot([a[0] + xi], [a[1]+ yi], [a[2]+zi], 'o', color=(0,0.2,k/float(length)))
         ax.axis("equal")
+        plt.show()
+        
+def test_square_sampling(width=5, length=40):
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        
+        vec = numpy.array([1.0, 10.0, 40.0])
+        
+        x, y, z = numpy.linspace(0, vec[0], length), numpy.linspace(0, vec[1], length), numpy.linspace(0, vec[2], length)
+
+        ov = get_square_offset_vectors(vec, width)
+        for k, (xi, yi, zi) in enumerate(zip(x, y, z)):
+            ax.plot([xi], [yi], [zi], 'rd')
+            for x_ in range(ov.shape[1]):
+                for y_ in range(ov.shape[2]):
+                    ax.plot([ov[0, x_, y_]+xi], [ov[1, x_, y_]+ yi], [ov[2, x_, y_]+zi], 'bo',)
+        #ax.axis("equal")
         plt.show()
     
 def convert_and_resample_from_tif(file_name, output_file='image_cropped_ana.h5', z_factor=2.35, path_to_image='data'):
