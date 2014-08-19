@@ -295,7 +295,7 @@ class Kymograph3D(object):
                 perp_offset_vecs = numpy.vstack(all_circ_offsets) 
             else:
                 perp_offset_vecs = []   
-            coords = numpy.zeros((3, len(x), len(all_circ_offsets)+1))
+            coords = numpy.zeros((3, len(x), len(perp_offset_vecs)+1))
             coords[2, :, -1] = x
             coords[1, :, -1] = y
             coords[0, :, -1] = z
