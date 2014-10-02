@@ -48,10 +48,9 @@ def get_square_offset_vectors(vec, width):
     perp_vec_1 = numpy.array([-vec[1] -vec[2], vec[0], vec[0]])
     if (numpy.linalg.norm(perp_vec_1)) < eps:
         perp_vec_1 = numpy.array([vec[2], vec[2], -vec[0] -vec[1]])
-        
-    perp_vec_2 = numpy.cross(vec, perp_vec_1)
-    
     perp_vec_1 /= numpy.linalg.norm(perp_vec_1)
+    
+    perp_vec_2 = numpy.cross(vec, perp_vec_1)
     perp_vec_2 /= numpy.linalg.norm(perp_vec_2)
     
     result = numpy.zeros((3, width, width), dtype=numpy.float32)
@@ -189,8 +188,8 @@ class Kymograph3D(object):
                 planes_c1 = planes[0]
                 img = numpy.zeros((planes_c0.shape[0], planes_c0.shape[1], planes_c0.shape[2], 3), dtype=numpy.float32)
                 for p in xrange(planes_c0.shape[2]):    
-                    img[:,:,p, 0] = planes_c0[:,:,p]
-                    img[:,:,p, 1] = planes_c1[:,:,p]
+                    img[:,:,p, 1] = planes_c0[:,:,p]
+                    img[:,:,p, 0] = planes_c1[:,:,p]
                 for c in xrange(2):
                     img[:,:,:,c] = (img[:,:,:,c] - img[:,:,:,c].min())
                     img[:,:,:,c] *= channel_scaling[c]  
@@ -260,12 +259,23 @@ class Kymograph3D(object):
         plane_cords.shape += (1,) 
         plane_cords = numpy.repeat(plane_cords, len(x), 3)
        
-        plane_cords*= scale_factor      
+        #plane_cords*= scale_factor      
         plane_cords[2, :, :, :] += x
         plane_cords[1, :, :, :] += y
         plane_cords[0, :, :, :] += z
         
-        planes = [ndimage.map_coordinates(img, plane_cords, prefilter=False,  mode='nearest', cval=0) for img in images]
+        if False:
+            from mpl_toolkits.mplot3d import Axes3D
+            fig = pylab.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.plot(plane_cords[2,...].flatten(), plane_cords[1,...].flatten(), plane_cords[0,...].flatten(), 'r.')
+            ax.plot(x,y,z, 'bo')
+            ax.set_xlim(0,180)
+            ax.set_ylim(0,180)
+            ax.set_zlim(0,120)
+            pylab.show()  
+        
+        planes = [ndimage.map_coordinates(img, plane_cords, prefilter=False, cval=0) for img in images]
         return planes
         
 
@@ -315,9 +325,9 @@ class Kymograph3D(object):
             coords[0, :, j] = z_ + z
         
         if aggregation == 'max':
-            profiles = [ndimage.map_coordinates(img, coords, prefilter=False,  mode='nearest', cval=0).max(1) for img in images]
+            profiles = [ndimage.map_coordinates(img, coords, prefilter=False, cval=0).max(1) for img in images]
         elif aggregation == 'mean':
-            profiles = [ndimage.map_coordinates(img, coords, prefilter=False, mode='nearest', cval=0).mean(1) for img in images]
+            profiles = [ndimage.map_coordinates(img, coords, prefilter=False, cval=0).mean(1) for img in images]
         else:
             RuntimeError("width_aggregation not understood: '%s'" % aggregation)
         return profiles
@@ -390,7 +400,6 @@ def convert_and_resample_from_tif(file_name, output_file='image_cropped_ana.h5',
         for c in range(shape[1]):
             for z in range(shape[2]):
                 img[t, c, z, :, :,] = r.read(c=c, t=t, z=z)
-            print ".",
             img_r[t,c,:,:,:] = vigra.sampling.resizeVolumeSplineInterpolation(img[t,c,:,:,:], shape_r[2:])
             img_r_prefilter[t, c, :, :, :] = ndimage.spline_filter(img_r[t,c,:,:,:])
         
@@ -403,23 +412,23 @@ def convert_and_resample_from_tif(file_name, output_file='image_cropped_ana.h5',
     
 if __name__ == "__main__":
     if False:
-        convert_and_resample_from_tif('M:/experiments/Experiments_002500/002513/Analysis/2014_03_27(microtubules)/Process_02_3D_tracking_CENPA/cell1_12_crop_3D_Gaussian_ROI_t11_150.tif',
-                                      'cell1_12_crop.h5',
+        convert_and_resample_from_tif('cell1_12_halfvol2timehyperstack-cropped.tif',
+                                      'cell1_12_halfvol2timehyperstack-cropped.h5',
                                       z_factor=2.35)
         
     #test_rodriguez_rot(length=100,radius=1)
          
     if True:
-        kymo = Kymograph3D("cell1_12_crop.h5",
+        kymo = Kymograph3D("cell1_12_halfvol2timehyperstack-cropped.h5",
 #                             "data_resampled_prefiltered",
-                            "data_resampled",
-                            "tracks_kinetochore.txt",
-                            "tracks_pole.txt",
-                            [1, 1, 2.35],)
+                            "data_resampled_prefiltered",
+                            "KT_Spots in tracks statistics.txt",
+                            "Poles_Spots in tracks statistics.txt",
+                            [1, 1, 1],)
 #         kymo.compute(radius=0, aggregation='mean', extension=[0,-1], ids=((0,24), (1,24)))
-        kymo.compute(radius=0, aggregation='mean', extension=[0,-1])
-        kymo.export_butterfly(channel_scaling=(2, 0.25))
-        kymo.export(channel_scaling=(2, 0.25))
+        kymo.compute(radius=3, aggregation='mean', extension=[0,-1])
+#         kymo.export_butterfly(channel_scaling=(2, 0.25))
+        kymo.export(channel_scaling=(2, 0.25), output_dir="bla")
 
         
                    
