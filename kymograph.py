@@ -144,6 +144,10 @@ class Kymograph3D(object):
         if not aggregation in ("mean", "max"):
             raise RuntimeError("line radius aggregation functions needs to be 'mean' or 'max'") 
         
+        if radius == 0 and integration.startswith('full'):
+            raise RuntimeError("Radius 0 and full integration is not possible") 
+            
+        
         self.kymograph_vectors = defaultdict(dict)
         self.kymograph_data = defaultdict(dict)
         self.kymograph_plane_data = defaultdict(dict)
@@ -153,10 +157,11 @@ class Kymograph3D(object):
                 log.info("\tExtracting vectors for ids: %d %d and frame %d" % (k_id, p_id, frame))
                 self.kymograph_vectors[(k_id, p_id)][frame] = k_vec, p_vec
             
+        extend = [extension[0], extension[1]]
         for (k_id, p_id), current_kymo in self.kymograph_vectors.items():
             if extension[1] == -1:
                 max_len = numpy.max(map(lambda vecs: numpy.linalg.norm(vecs[1]-vecs[0]), current_kymo.values()))
-                extension[1] = max_len
+                extend[1] = max_len
             
             log.info("\tgenerating for ids: %d %d" % (k_id, p_id))
             for frame, (destination, origin) in current_kymo.items():
@@ -165,13 +170,13 @@ class Kymograph3D(object):
                                                                    destination, 
                                                                    radius,
                                                                    aggregation,
-                                                                   extension,
+                                                                   extend,
                                                                    integration)
                 if export_planes:
                     self.kymograph_plane_data[(k_id, p_id)][frame] = self._extract_plane([self.image_raw[frame, c, :, :, :] for c in on_channels], 
                                                                            origin, 
                                                                            destination, 
-                                                                           extension,
+                                                                           extend,
                                                                            width=plane_width,
                                                                            pixel_width=plane_pixel_width) 
                                                                          
@@ -419,16 +424,17 @@ if __name__ == "__main__":
     #test_rodriguez_rot(length=100,radius=1)
          
     if True:
-        kymo = Kymograph3D("cell1_12_halfvol2timehyperstack-cropped.h5",
+        kymo = Kymograph3D("data/cell1_12_halfvol2timehyperstack-cropped.h5",
 #                             "data_resampled_prefiltered",
                             "data_resampled_prefiltered",
-                            "KT_Spots in tracks statistics.txt",
-                            "Poles_Spots in tracks statistics.txt",
+                            "data/Poles_Spots in tracks statistics.txt",
+                            "data/KT_Spots in tracks statistics.txt",
+                            
                             [1, 1, 1],)
-#         kymo.compute(radius=0, aggregation='mean', extension=[0,-1], ids=((0,24), (1,24)))
-        kymo.compute(radius=3, aggregation='mean', extension=[0,-1])
+        kymo.compute(radius=3, aggregation='mean', extension=[1,1], ids=((0,126), (126)), integration="full")
+#         kymo.compute(radius=3, aggregation='mean', extension=[0,-1])
 #         kymo.export_butterfly(channel_scaling=(2, 0.25))
-        kymo.export(channel_scaling=(2, 0.25), output_dir="bla")
+        kymo.export(channel_scaling=(2, 0.3), output_dir="data/chris_test")
 
         
                    
